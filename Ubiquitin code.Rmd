@@ -1,0 +1,123 @@
+---
+title: "Ubiquitin"
+author: "Lauren Gill"
+date: "28/12/2021"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Reading in data
+```{r}
+ubi <-read.csv(here("Data", "Ubiquitin.csv"))
+```
+
+### Seeing if ubiquitin levels are affected by shore position or recovery time
+Make a subset of controls
+```{r}
+ubicontrol <- subset(ubi, ubi$treatment=="C")
+ubicontrol1 <- aggregate(ubicontrol$rel.dens, by=list(ubicontrol$position, ubicontrol$freeze.time, ubicontrol$recovery), FUN=mean)
+```
+
+Create an excel file with controls, use these to divide against experimentals
+```{r}
+#write.xlsx(control1) 
+```
+Then within excel divide each exp value by mean value for control and reupload the excel sheet, also take the log base 2 of all the relative densities
+
+Then use this sheet from now on... first read in data
+```{r}
+log2 <-read.csv(here("Data", "Ubiquitin_modified.csv"))
+```
+
+Now do an anova on the log 2 data
+```{r}
+shapiro.test(log2$log.2) #p-value = 0.2554
+log2.aov <- aov(log.2~position*as.factor(freeze.time)*as.factor(recovery),data=log2)
+summary(log2.aov)
+```
+
+Now reducing the anova down to the basics using stepAIC
+```{r}
+log3.aov <- MASS::stepAIC(log2.aov)
+summary(log3.aov)
+TukeyHSD(log3.aov)
+```
+
+### Plotting Ubiquitin vs recovery/position graphs
+First ubiqutin expression vs recovery
+```{r}
+log2$recovery <- as.factor(log2$recovery)
+log2$freeze.time <- as.factor(log2$freeze.time)
+arrangedata <- ddply(log2, c("recovery","freeze.time"), summarise,
+                         N    = length(log.2),
+                         mean = mean(log.2),
+                         sd   = sd(log.2),
+                         std   = sd / sqrt(N))
+pd <- position_dodge(0.01)  #The errorbars overlapped, so use position_dodge to move them horizontally
+ubiquitin_recovery <- ggplot(arrangedata, aes(x=recovery, y=mean, colour=freeze.time,group=freeze.time)) + 
+  geom_errorbar(aes(ymin=mean-std, ymax=mean+std), width=.1, position=pd) +
+  geom_line(size=1.3) + 
+  geom_point()+
+  ylab("Log  Fold Value of Relative Ubiquitin Density") +
+  xlab("Recovery Time")+
+  theme_classic() +scale_color_manual(values = c("#E69F00", "#009E73"), labels = c("4 x 2 h", "1 x 8 h"))+
+  geom_hline(yintercept=c(0), linetype="dashed")+
+  scale_x_discrete(expand=expansion(mult=c(0.2,0.2)), labels=c("2 hours", "20 hours"))+
+  labs(color='Freeze Treatment')+  ylim(-0.3, 0.2)+theme(legend.position="none")
+ubiquitin_recovery
+
+```
+
+Ubiqutin vs position
+```{r}
+arrangedataposition <- ddply(log2, c("position","freeze.time"), summarise,
+                     N    = length(log.2),
+                     mean = mean(log.2),
+                     sd   = sd(log.2),
+                     std   = sd / sqrt(N))
+pd <- position_dodge(0.01)  #The errorbars overlapped, so use position_dodge to move them horizontally
+ubiquitin_position <- ggplot(arrangedataposition, aes(x=position, y=mean, colour=freeze.time,group=freeze.time)) + 
+  geom_errorbar(aes(ymin=mean-std, ymax=mean+std), width=.1, position=pd) +
+  geom_line(size=1.3) + 
+  geom_point()+
+  ylab("Log Fold Value of Relative Ubiquitin Density") +
+  xlab("Position")+
+  theme_classic() +scale_color_manual(values = c("#E69F00", "#009E73"), labels = c("4 x 2 h", "1 x 8 h"))+
+  geom_hline(yintercept=c(0), linetype="dashed")+
+  scale_x_discrete(expand=expansion(mult=c(0.2,0.2)), labels=c("High", "Low"))+
+  labs(color='Freeze Treatment')+  ylim(-0.25, 0.15)+theme(legend.position="none")
+ubiquitin_position
+```
+
+Combining the graphs
+```{r}
+legend.ubiqutin <- get_legend(
+  # create some space to the left of the legend
+  ubiquitin_position + theme(legend.box.margin = margin(0, 0, 0, 12))
+)
+ubiqutin <- plot_grid(ubiquitin_recovery, ubiquitin_position, legend.ubiqutin, ncol=3, rel_widths = c(3, 3, 1.5), labels = c("A", "B"))
+ubiqutin
+```
+
+
+### Basal expression of Ubiquitin
+Only use controls, these are the only ones needed for basal expression, now aggregate this subset to group it by position (H vs L intertidal)
+```{r}
+highlow <-aggregate(ubicontrol$rel.dens, by=list(ubicontrol$position), FUN=mean)
+shapiro.test(ubicontrol$rel.dens) # p-value = 5.61e-05, not normal
+wilcox.test(rel.dens~position, data=ubicontrol) #p-value = 0.3556
+```
+
+Now making a box plot of basal levels
+```{r}
+ubi_basal <- ggplot(ubicontrol, aes(x=position, y=rel.dens)) + 
+  geom_boxplot() + ylim(0,2.5) +
+  xlab("Position") + ylab("Relative Ubiquitin Density") + 
+  theme_classic()+geom_jitter() + scale_x_discrete(labels = c("High", "Low"))
+ubi_basal
+```
+
+

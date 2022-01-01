@@ -1,0 +1,440 @@
+---
+title: "Code for Mussel Freeze Thaw"
+author: "Lauren Gill"
+date: "16/12/2021"
+
+output:
+  pdf_document:
+    toc: TRUE
+toc-depth: 3
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, tidy=TRUE, tidy.opts = list(width.cutoff = 60))
+```
+
+## Libraries
+
+```{r, message = FALSE}
+library(MASS)
+library(plyr)
+library(dplyr)
+library(ggplot2)
+library(ggpubr)
+library(here)
+library(tidyverse)
+library(cowplot)
+```
+
+## Basal Levels of HSP70
+
+### Top Band
+
+Reading in Data
+```{r}
+top_bands <-read.csv(here("Data", "Top band.csv"))
+```
+For Basal levels we only want to use the control mussels, because these are the mussels that were not frozen, and therefore will show us how much HSP70 they have naturally, so subset the controls and then take the mean of relative density
+```{r, message = FALSE}
+controlonlytop <- subset(top_bands, top_bands$treatment == 'C')
+controldenstop <- controlonlytop  %>%
+  group_by(position, time.frozen, sam.num)  %>%
+  summarise(meanden=mean(rel.dens))
+```
+
+Now running a t.test on the control mussels to see if position makes a difference
+```{r}
+shapiro.test(controldenstop$meanden) #p = 0.08, its normal
+bartlett.test(meanden~position, data = controldenstop) # p-value = 0.09448, Homogeneity of variances are equal
+t.test(meanden~position, var.equal=FALSE, data=controldenstop)
+```
+
+Now making a box plot of basal levels
+```{r}
+controlboxtop <- ggplot(controldenstop, aes(x=position, y=meanden)) + 
+  geom_boxplot() + ylim(0,1) +
+  xlab("Position") + ylab("Relative density") +
+  theme_classic()+geom_jitter()
+controlboxtop
+```
+
+### All bands 
+Below are the same steps as with the top bands
+```{r, message = FALSE}
+all_bands <-read.csv(here( "Data", "All bands.csv"))
+controlonlyall <- subset(all_bands, all_bands$treatment== 'C')
+controldensall <- controlonlyall  %>%
+  group_by(position, freeze.time, sam.num)  %>%
+  summarise(meanden=mean(rel.dens))
+
+```
+
+```{r}
+shapiro.test(controldensall$meanden) #p-value = 0.04557, not normal
+##Using man whitney U test
+wilcox.test(meanden~position, data=controldensall)
+
+
+#Now making a box plot of basal levels - NO difference
+controlbox <- ggplot(controldensall, aes(x=position, y=meanden)) + 
+  geom_boxplot() + ylim(0,1) +
+  xlab("Position") + ylab("Relative density") +
+  theme_classic()+geom_jitter()
+controlbox
+```
+
+### Bottom Bands
+```{r, message = FALSE}
+bottom_bands <-read.csv(here( "Data", "Bottom bands.csv"))
+
+controlonlybottom <- subset(bottom_bands, bottom_bands$treatment== 'C')
+controldensbot <- controlonlybottom  %>%
+  group_by(shore.position, freeze.time, sample.num)  %>%
+  summarise(meanden=mean(rel.dens))
+```
+
+```{r}
+shapiro.test(controldensbot$meanden) #p-value = 0.09156
+t.test(meanden~shore.position, var.equal=FALSE, data=controldensbot) #p-value = 0.7409
+
+#Now making a box plot of basal levels - NO difference
+controlboxbot <- ggplot(controldensbot, aes(x=shore.position, y=meanden)) + 
+  geom_boxplot() + ylim(0,1) +
+  xlab("Position") + ylab("Relative density") +
+  theme_classic() + geom_jitter()
+controlboxbot
+```
+
+Now combining all three graphs to make one
+```{r}
+
+plot_grid(controlbox, controlboxbot,controlboxtop, ncol=3, labels= "AUTO")
+
+```
+
+## HSP70 vs position (High intertidal/Low intertidal) and recovery time (2 or 20 hours)
+
+### Top Bands
+Make a subset of controls, and then in a seperate excel spread sheet, divide the relative densities of the top bands by the control averages. Then took the log 2 averages of those
+```{r}
+controlonlytop_1<- aggregate(controlonlytop$rel.dens,
+                             by=list(controlonlytop$position, 
+                                     controlonlytop$time.frozen, 
+                                     controlonlytop$recovery), FUN=mean)
+log2top <-read.csv(here("Data", "meantop.csv"))
+log2top.aov <- aov(log.2.fold~position*freeze.time*recovery,data=log2top)
+summary(log2top.aov)
+```
+
+### All bands
+
+Group this data into just the experimentals, with mean densities
+```{r, message = FALSE}
+meandensityall <- all_bands  %>%
+  group_by(treatment, position,freeze.time, recovery, sam.num)  %>%
+  summarise(meanden=mean(rel.dens)) %>%
+  filter(treatment == 'E')
+```
+
+Then write this into an excel sheet, copy in control values, divide by those, and then log 2 those values. Making seperate columns for each function. Read in this new data set, mutate recovery and freeze time as a factor
+```{r}
+#write.csv(meandensityall,here("Data", "meanall1.csv"))
+
+log2all <- read.csv(here("Data", "meanall.csv"))
+log2all$recovery <- as.factor(log2all$recovery)
+log2all$freeze.time <- as.factor(log2all$freeze.time)
+```
+
+Now to run an anova on this data, first checking for normality using shapirowilk, variances using bartlett test
+
+```{r}
+shapiro.test(log2all$log.2.fold) #p-value =  0.08344, normal
+bartlett.test(log.2.fold~position ,data=log2all) #p-value = 0.4231
+log2all.aov <- aov(log.2.fold~position*freeze.time*recovery,data=log2all)
+summary(log2all.aov)
+```
+
+### Bottom bands
+
+```{r}
+log2bottom <-read.csv(here("Data", "meanbottom1.csv"))
+log2bottom$recovery <- as.factor(log2bottom$recovery)
+log2bottom$freeze.time <- as.factor(log2bottom$freeze.time)
+shapiro.test(log2bottom$log.2.fold) #p-value = 0.05715
+bartlett.test(log.2.fold~position ,data=log2bottom) #p-value = 0.4688
+log2bottom.aov <- aov(log.2.fold~position*freeze.time*recovery,data=log2bottom)
+summary(log2bottom.aov)
+```
+
+### Top bands
+
+```{r}
+log2top <-read.csv(here("Data", "meantop.csv"))
+log2top$recovery <- as.factor(log2top$recovery)
+log2top$freeze.time <- as.factor(log2top$freeze.time)
+logtop.aov <- aov(log.2.fold~position*freeze.time, data=log2top)
+summary(logtop.aov)
+TukeyHSD(logtop.aov)
+```
+
+
+### Graphing the data for freeze time vs position
+All bands
+```{r}
+arrangedata <- ddply(log2all, c("position","freeze.time"), summarise,
+                     N    = length(log.2.fold),
+                     mean = mean(log.2.fold),
+                     sd   = sd(log.2.fold),
+                     std   = sd / sqrt(N))
+pd <- position_dodge(0.01)  
+#The errorbars overlapped, so use position_dodge to move them horizontally
+all.bands.position <- ggplot(arrangedata, 
+                             aes(x=position, y=mean, 
+                                 colour=freeze.time,group=freeze.time)) + 
+  geom_errorbar(aes(ymin=mean-std, ymax=mean+std), width=.1, position=pd) +
+  geom_line(size=1.3) +
+  geom_point()+
+  ylab("Log   Fold Value of Relative HSP70 Density") +
+  xlab("Position")+ theme(legend.position = "none")+
+  theme_classic() +scale_color_manual(values = c("#E69F00", "#009E73"))+
+  geom_hline(yintercept=c(0), linetype="dashed")+
+  scale_x_discrete(expand=expansion(mult=c(0.2,0.2)),labels=c("High", "Low"))+ 
+  theme(legend.position="none")+ ylim(-1.3, 1.2)
+```
+
+Bottom bands
+```{r}
+arrangedata.bottom <- ddply(log2bottom, c("position","freeze.time"), summarise,
+                            N    = length(log.2.fold),
+                            mean = mean(log.2.fold),
+                            sd   = sd(log.2.fold),
+                            std   = sd / sqrt(N))
+pd <- position_dodge(0.01)  
+bottom.bands.position <- ggplot(arrangedata.bottom, 
+                                aes(x=position, y=mean, 
+                                    colour=freeze.time,group=freeze.time)) + 
+  geom_errorbar(aes(ymin=mean-std, ymax=mean+std), width=.1, position=pd) +
+  geom_line(size=1.3) + 
+  geom_point()+
+  ylab("Log  Fold Value of Relative 68 + 70 kDa Density") +
+  xlab("Freeze Treatment")+
+  theme_classic() +scale_color_manual(values = c("#E69F00", "#009E73"))+
+  geom_hline(yintercept=c(0), linetype="dashed")+
+  scale_x_discrete(expand=expansion(mult=c(0.2,0.2)), labels=c("High", "Low"))+ 
+  theme(legend.position="none")+ylim(-1.3, 1.2)
+```
+
+Top bands
+```{r}
+arrangedata.top <- ddply(log2top, c("position","freeze.time"), summarise,
+                         N    = length(log.2.fold),
+                         mean = mean(log.2.fold),
+                         sd   = sd(log.2.fold),
+                         std   = sd / sqrt(N))
+pd <- position_dodge(0.01)  
+top.bands.position <- ggplot(arrangedata.top, 
+                             aes(x=position, y=mean, 
+                                 colour=freeze.time,group=freeze.time)) + 
+  geom_errorbar(aes(ymin=mean-std, ymax=mean+std), width=.1, position=pd) +
+  geom_line(size=1.3) + 
+  geom_point()+
+  ylab("Log   Fold Value of Relative 76 kDa Density") +
+  xlab("Freeze Treatment")+
+  theme_classic() +scale_color_manual(values = c("#E69F00", "#009E73"), 
+                                      labels = c("4 x 2 h", "1 x 8 h"))+
+  geom_hline(yintercept=c(0), linetype="dashed")+
+  scale_x_discrete(expand=expansion(mult=c(0.2,0.2)), labels=c("High", "Low"))+
+  labs(color='Freeze Treatment')+  ylim(-1.3, 1.2)+ theme(legend.position="none") 
+```
+
+Now plotting all together. Not shown here, but legend was added in using get.legend function in cowplot
+
+```{r}
+fullpositiongraph<- plot_grid(all.bands.position, bottom.bands.position, top.bands.position, labels = "AUTO", label_size = 12, ncol=4, rel_widths = c(3,3,3))
+fullpositiongraph
+```
+This same thing was done with the recovery data, letters to denote significance were added after in "paint".
+
+## Ubiquitin
+
+Reading in data
+```{r}
+ubi <-read.csv(here("Data", "Ubiquitin.csv"))
+```
+
+### Seeing if ubiquitin levels are affected by shore position or recovery time
+Make a subset of controls
+```{r}
+ubicontrol <- subset(ubi, ubi$treatment=="C")
+ubicontrol1 <- aggregate(ubicontrol$rel.dens, by=list(ubicontrol$position, ubicontrol$freeze.time, ubicontrol$recovery), FUN=mean)
+```
+
+Create an excel file with controls, use these to divide against experimentals
+```{r}
+#write.xlsx(control1) 
+```
+Then within excel divide each exp value by mean value for control and reupload the excel sheet, also take the log base 2 of all the relative densities
+
+Then use this sheet from now on... first read in data
+```{r}
+log2 <-read.csv(here("Data", "Ubiquitin_modified.csv"))
+```
+
+Now do an anova on the log 2 data
+```{r}
+shapiro.test(log2$log.2) #p-value = 0.2554
+log2.aov <- aov(log.2~position*as.factor(freeze.time)*as.factor(recovery),data=log2)
+summary(log2.aov)
+```
+
+Now reducing the anova down to the basics using stepAIC
+```{r}
+log3.aov <- MASS::stepAIC(log2.aov)
+summary(log3.aov)
+TukeyHSD(log3.aov)
+```
+
+### Plotting Ubiquitin vs recovery/position graphs
+First ubiqutin expression vs recovery
+```{r}
+log2$recovery <- as.factor(log2$recovery)
+log2$freeze.time <- as.factor(log2$freeze.time)
+arrangedata <- ddply(log2, c("recovery","freeze.time"), summarise,
+                         N    = length(log.2),
+                         mean = mean(log.2),
+                         sd   = sd(log.2),
+                         std   = sd / sqrt(N))
+pd <- position_dodge(0.01)  
+#The errorbars overlapped, so use position_dodge to move them horizontally
+ubiquitin_recovery <- ggplot(arrangedata, aes(x=recovery, y=mean, colour=freeze.time,group=freeze.time)) + 
+  geom_errorbar(aes(ymin=mean-std, ymax=mean+std), width=.1, position=pd) +
+  geom_line(size=1.3) + 
+  geom_point()+
+  ylab("Log  Fold Value of Relative Ubiquitin Density") +
+  xlab("Recovery Time")+
+  theme_classic() +scale_color_manual(values = c("#E69F00", "#009E73"), labels = c("4 x 2 h", "1 x 8 h"))+
+  geom_hline(yintercept=c(0), linetype="dashed")+
+  scale_x_discrete(expand=expansion(mult=c(0.2,0.2)), labels=c("2 hours", "20 hours"))+
+  labs(color='Freeze Treatment')+  ylim(-0.3, 0.2)+theme(legend.position="none")
+ubiquitin_recovery
+
+```
+
+Ubiqutin vs position
+```{r}
+arrangedataposition <- ddply(log2, c("position","freeze.time"), summarise,
+                     N    = length(log.2),
+                     mean = mean(log.2),
+                     sd   = sd(log.2),
+                     std   = sd / sqrt(N))
+pd <- position_dodge(0.01)  
+#The errorbars overlapped, so use position_dodge to move them horizontally
+ubiquitin_position <- ggplot(arrangedataposition, aes(x=position, y=mean, colour=freeze.time,group=freeze.time)) + 
+  geom_errorbar(aes(ymin=mean-std, ymax=mean+std), width=.1, position=pd) +
+  geom_line(size=1.3) + 
+  geom_point()+
+  ylab("Log Fold Value of Relative Ubiquitin Density") +
+  xlab("Position")+
+  theme_classic() +scale_color_manual(values = c("#E69F00", "#009E73"), labels = c("4 x 2 h", "1 x 8 h"))+
+  geom_hline(yintercept=c(0), linetype="dashed")+
+  scale_x_discrete(expand=expansion(mult=c(0.2,0.2)), labels=c("High", "Low"))+
+  labs(color='Freeze Treatment')+  ylim(-0.25, 0.15)+theme(legend.position="none")
+ubiquitin_position
+```
+
+Combining the graphs
+```{r}
+legend.ubiqutin <- get_legend(
+  # create some space to the left of the legend
+  ubiquitin_position + theme(legend.box.margin = margin(0, 0, 0, 12))
+)
+ubiqutin <- plot_grid(ubiquitin_recovery, ubiquitin_position, 
+                      legend.ubiqutin, ncol=3, rel_widths = c(3, 3, 1.5), 
+                      labels = c("A", "B"))
+ubiqutin
+```
+
+
+### Basal expression of Ubiquitin
+Only use controls, these are the only ones needed for basal expression, now aggregate this subset to group it by position (H vs L intertidal)
+```{r}
+highlow <-aggregate(ubicontrol$rel.dens, by=list(ubicontrol$position), FUN=mean)
+shapiro.test(ubicontrol$rel.dens) # p-value = 5.61e-05, not normal
+wilcox.test(rel.dens~position, data=ubicontrol) #p-value = 0.3556
+```
+
+Now making a box plot of basal levels
+```{r}
+ubi_basal <- ggplot(ubicontrol, aes(x=position, y=rel.dens)) + 
+  geom_boxplot() + ylim(0,2.5) +
+  xlab("Position") + ylab("Relative Ubiquitin Density") + 
+  theme_classic()+geom_jitter() + scale_x_discrete(labels = c("High", "Low"))
+ubi_basal
+```
+
+## Correlation between HSP and ubiqutuin
+
+Modified the HSP and ubiquitin data to make 2 new CSVs with just the means of ubiquitin and HSP on the. One has the averages across treatment groups, the other has the value for each sample
+```{r}
+compdata <-read.csv(here("Data", "Correlation btw hsp and ub.csv"))
+sampledata <- read.csv(here("Data", "Sample correlation btw hsp and ub.csv"))
+```
+
+First check assumptions for ub and hsp, line is linear so it works
+```{r}
+regcomp <- ggscatter(compdata, x="ub", y="hsp", add = "reg.line", 
+          conf.int =  TRUE, cor.coef = TRUE, cor.method = "pearson", 
+          xlab = "Relative Ubiquitin Value", ylab = "Relative HSP70 Value")
+shapiro.test(compdata$ub)
+##Data = normal, p value = 0.38 
+shapiro.test(compdata$hsp)
+##Data is normal, p value = 0.28
+
+##THen check assumptions for log.2 hsp and ub##############
+logcomp <- ggscatter(compdata, x="log.ub", y="log.hsp", add = "reg.line", 
+          conf.int =  TRUE, cor.coef = TRUE, cor.method = "pearson", 
+          xlab = "Log  Ubiquitin Value", ylab = "Log  HSP Value")
+##Line is also linear so it works
+
+shapiro.test(compdata$log.ub)
+##Data = normal, p value = 0.3916 
+shapiro.test(compdata$log.hsp)
+##Data is normal, p value = 0.832
+```
+
+### Testing for correlation
+```{r}
+## un-log transformed data
+hsp.ub <- cor.test(compdata$ub, compdata$hsp, 
+                method = "pearson")
+hsp.ub
+hsp.ub$p.value  #0.006917628
+hsp.ub$estimate #0.8542599  
+
+## log transformd data
+log.hsp.ub <- cor.test(compdata$log.ub, compdata$log.hsp, 
+                   method = "pearson")
+log.hsp.ub
+log.hsp.ub$p.value  #0.0104069
+log.hsp.ub$estimate #0.8320211  
+```
+
+### Plotting correlation graphs
+
+Sample by sample graphs
+```{r}
+sample <- ggscatter(sampledata, x="ub", y="hsp", add = "reg.line", 
+          conf.int =  TRUE, cor.coef = TRUE, cor.method = "pearson", 
+          xlab = "Relative Ubiquitin Value", ylab = "Relative HSP70 Value")
+
+fulltreatment <- ggscatter(compdata, x="ub", y="hsp", add = "reg.line", 
+          conf.int =  TRUE, cor.coef = TRUE, cor.method = "pearson", 
+          xlab = "Relative Ubiquitin Value", ylab = "Relative HSP70 Value")
+```
+
+Combining plots
+```{r}
+combinedplot <- plot_grid(sample, fulltreatment, labels = c("A", "B"))
+combinedplot
+```
+
