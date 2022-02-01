@@ -24,7 +24,70 @@ library(ggpubr)
 library(here)
 library(tidyverse)
 library(cowplot)
+library(car)
+library(multcomp)
 ```
+
+## Survival
+
+### Freeze Treatment Comparisons
+Reading in Data and filtering for total freeze time to be equal to 8 hours
+```{r}
+survival <- read.csv(here("Data", "survival.csv"))
+only.8 <- survival %>% filter(Total.freeze.time ==8)
+```
+
+Now running a chisq test on the data, using time frozen, acclimation time and position as variables
+```{r}
+only.8$Time_Frozen_hrs <- as.factor(only.8$Time_Frozen_hrs)
+only.8.glm <- glm(Survival~Time_Frozen_hrs*Acclimation_time_days*Position,family="binomial",data=only.8)
+
+only.8.glm.reduced <- glm(Survival~Time_Frozen_hrs,family="binomial",data=only.8)
+anova(only.8.glm,test="Chisq")
+summary(glht(only.8.glm.reduced, mcp(Time_Frozen_hrs="Tukey")))
+```
+
+Now seeing if length affects survival
+```{r}
+only.8.glm.length<- glm(Survival~Length_mm,data=only.8)
+summary(aov(only.8.glm.length))
+```
+
+```{r}
+only.8.group <- group_by(only.8,Time_Frozen_hrs)
+only.8.sum <- summarise(only.8.group, prop_surv=mean(Survival, na.rm=TRUE), sd=sd(Survival, na.rm=TRUE), total=n(), SE=sd(Survival)/sqrt(n()))
+
+only.8.sum$Time_Frozen_hrs <- as.factor(only.8.sum$Time_Frozen_hrs)
+
+survivalgraph <- ggplot(only.8.sum, aes(x=Time_Frozen_hrs, y=prop_surv)) +geom_point()+ylim(0,1) +
+  xlab("Freeze Treatments") + ylab("Survival Proportion") + 
+  geom_errorbar(aes(ymin=prop_surv-SE, ymax=prop_surv+SE, width=.2))+
+  theme_classic()+
+  geom_point(size=2)+ scale_x_discrete(labels=c("2 hour x4", "4 hour x2", "8 hour x1"))
+
+```
+
+
+### Cumulative freezing
+
+```{r}
+repeat2 <-subset(survival, survival$Time_Frozen_hrs ==2)
+repeat2sum <- group_by(repeat2,Culmulative_Freeze_Number)
+repeat2sum1 <- summarise(repeat2sum, prop_surv=mean(Survival, na.rm=TRUE), sd=sd(Survival, na.rm=TRUE), total=n(), SE=sd(Survival)/sqrt(n()))
+repeatedfreeze <- ggplot(repeat2sum1, aes(x=Culmulative_Freeze_Number, y=prop_surv)) + geom_point() +ylim(0,1) +
+  xlab("Cumulative Freeze Number") + ylab("Survival Proportion")+
+  geom_errorbar(aes(ymin=prop_surv-SE, ymax=prop_surv+SE, width=.2))+
+  theme_classic()+
+  geom_point(size=2)
+```
+
+```{r}
+##combining cumulative and 8 hour total freezes
+combinedsurival <- plot_grid(survivalgraph, repeatedfreeze, labels = c("A", "B"))
+combinedsurival
+#ggsave("survivalgraph", device = "tiff", dpi = 300, width = 174, height = 100, units = "mm")
+```
+
 
 ## Basal Levels of HSP70
 
@@ -53,7 +116,7 @@ Now making a box plot of basal levels
 ```{r}
 controlboxtop <- ggplot(controldenstop, aes(x=position, y=meanden)) + 
   geom_boxplot() + ylim(0,1) +
-  xlab("Position") + ylab("Relative density") +
+  xlab("Position") + ylab("Relative 76 kDa Density") +
   theme_classic()+geom_jitter()
 controlboxtop
 ```
@@ -78,7 +141,7 @@ wilcox.test(meanden~position, data=controldensall)
 #Now making a box plot of basal levels - NO difference
 controlbox <- ggplot(controldensall, aes(x=position, y=meanden)) + 
   geom_boxplot() + ylim(0,1) +
-  xlab("Position") + ylab("Relative density") +
+  xlab("Position") + ylab("Relative HSP70 Density") +
   theme_classic()+geom_jitter()
 controlbox
 ```
@@ -100,7 +163,7 @@ t.test(meanden~shore.position, var.equal=FALSE, data=controldensbot) #p-value = 
 #Now making a box plot of basal levels - NO difference
 controlboxbot <- ggplot(controldensbot, aes(x=shore.position, y=meanden)) + 
   geom_boxplot() + ylim(0,1) +
-  xlab("Position") + ylab("Relative density") +
+  xlab("Position") + ylab("Relative 68+70 kDa Density") +
   theme_classic() + geom_jitter()
 controlboxbot
 ```
@@ -109,7 +172,7 @@ Now combining all three graphs to make one
 ```{r}
 
 plot_grid(controlbox, controlboxbot,controlboxtop, ncol=3, labels= "AUTO")
-
+ggsave("basalhsp70.tiff", device = "tiff", dpi = 300, width = 174, height = 100, units = "mm")
 ```
 
 ## HSP70 vs position (High intertidal/Low intertidal) and recovery time (2 or 20 hours)
@@ -190,13 +253,14 @@ pd <- position_dodge(0.01)
 #The errorbars overlapped, so use position_dodge to move them horizontally
 all.bands.position <- ggplot(arrangedata, 
                              aes(x=position, y=mean, 
-                                 colour=freeze.time,group=freeze.time)) + 
+                                 linetype=freeze.time,group=freeze.time)) + 
   geom_errorbar(aes(ymin=mean-std, ymax=mean+std), width=.1, position=pd) +
   geom_line(size=1.3) +
   geom_point()+
-  ylab("Log   Fold Value of Relative HSP70 Density") +
+  ylab(bquote(''~Log [2]~'Fold Value of Relative HSP70 Density')) +
   xlab("Position")+ theme(legend.position = "none")+
   theme_classic() +scale_color_manual(values = c("#E69F00", "#009E73"))+
+  theme(text = element_text(size=9))+
   geom_hline(yintercept=c(0), linetype="dashed")+
   scale_x_discrete(expand=expansion(mult=c(0.2,0.2)),labels=c("High", "Low"))+ 
   theme(legend.position="none")+ ylim(-1.3, 1.2)
@@ -212,13 +276,14 @@ arrangedata.bottom <- ddply(log2bottom, c("position","freeze.time"), summarise,
 pd <- position_dodge(0.01)  
 bottom.bands.position <- ggplot(arrangedata.bottom, 
                                 aes(x=position, y=mean, 
-                                    colour=freeze.time,group=freeze.time)) + 
+                                    linetype=freeze.time,group=freeze.time)) + 
   geom_errorbar(aes(ymin=mean-std, ymax=mean+std), width=.1, position=pd) +
   geom_line(size=1.3) + 
   geom_point()+
-  ylab("Log  Fold Value of Relative 68 + 70 kDa Density") +
-  xlab("Freeze Treatment")+
-  theme_classic() +scale_color_manual(values = c("#E69F00", "#009E73"))+
+  ylab(bquote(''~Log [2]~'Fold Value of Relative 68 + 70 kDa Density')) +
+  xlab("Position")+
+  theme_classic()+ #+scale_color_manual(values = c("#E69F00", "#009E73"))+
+  theme(text = element_text(size=9))+
   geom_hline(yintercept=c(0), linetype="dashed")+
   scale_x_discrete(expand=expansion(mult=c(0.2,0.2)), labels=c("High", "Low"))+ 
   theme(legend.position="none")+ylim(-1.3, 1.2)
@@ -234,26 +299,135 @@ arrangedata.top <- ddply(log2top, c("position","freeze.time"), summarise,
 pd <- position_dodge(0.01)  
 top.bands.position <- ggplot(arrangedata.top, 
                              aes(x=position, y=mean, 
-                                 colour=freeze.time,group=freeze.time)) + 
+                                 group=freeze.time, 
+                                 linetype = freeze.time)) + 
   geom_errorbar(aes(ymin=mean-std, ymax=mean+std), width=.1, position=pd) +
-  geom_line(size=1.3) + 
+  geom_line(size=1.2) + 
   geom_point()+
-  ylab("Log   Fold Value of Relative 76 kDa Density") +
-  xlab("Freeze Treatment")+
-  theme_classic() +scale_color_manual(values = c("#E69F00", "#009E73"), 
-                                      labels = c("4 x 2 h", "1 x 8 h"))+
+  ylab(bquote(''~Log [2]~'Fold Value of Relative 76 kDa Density')) +
+  xlab("Position")+
+  theme_classic() +
+  theme(text = element_text(size=9))+
+  scale_linetype_discrete(labels = c("4 x 2 h", "1 x 8 h"))+
   geom_hline(yintercept=c(0), linetype="dashed")+
   scale_x_discrete(expand=expansion(mult=c(0.2,0.2)), labels=c("High", "Low"))+
-  labs(color='Freeze Treatment')+  ylim(-1.3, 1.2)+ theme(legend.position="none") 
+  labs(linetype='Freeze Treatment')+  ylim(-1.3, 1.2)+
+  theme(legend.position="none")
 ```
 
 Now plotting all together. Not shown here, but legend was added in using get.legend function in cowplot
 
 ```{r}
-fullpositiongraph<- plot_grid(all.bands.position, bottom.bands.position, top.bands.position, labels = "AUTO", label_size = 12, ncol=4, rel_widths = c(3,3,3))
+legend <- get_legend(top.bands.position)
+fullpositiongraph<- plot_grid(all.bands.position, bottom.bands.position, 
+                              top.bands.position, legend, 
+                              labels = c("A", "B", "C"), 
+                              label_size = 12, ncol=4, 
+                              rel_widths = c(4,4,4,2.5))
 fullpositiongraph
+
+#ggsave("positionhsp70.tiff", device = "tiff", dpi = 300, width = 174, height = 90, units = "mm", bg = "white")
+
 ```
 This same thing was done with the recovery data, letters to denote significance were added after in "paint".
+
+```{r}
+arrangedatar <- ddply(log2all, c("recovery","freeze.time"), summarise,
+                     N    = length(log.2.fold),
+                     mean = mean(log.2.fold),
+                     sd   = sd(log.2.fold),
+                     std   = sd / sqrt(N))
+pd <- position_dodge(0.01)  #The errorbars overlapped, so use position_dodge to move them horizontally
+all.bands.recovery <- ggplot(arrangedatar, aes(x=recovery, y=mean, linetype=freeze.time,group=freeze.time)) + 
+  geom_errorbar(aes(ymin=mean-std, ymax=mean+std), width=.1, position=pd) +
+  geom_line(size=1.3) +
+  geom_point()+
+  ylab(bquote(''~Log [2]~'Fold Value of Relative HSP70 Density')) +
+  xlab("Recovery Time")+ theme(legend.position = "none")+
+  theme_classic() +
+  theme(text = element_text(size=9))+
+  scale_color_manual(values = c("#E69F00", "#009E73"), labels = c("2 x 4 h", "1 x 8 h"))+
+  geom_hline(yintercept=c(0), linetype="dashed")+
+  scale_x_discrete(expand=expansion(mult=c(0.2,0.2)), labels=c("2 hours", "20 hours"))+
+  theme(legend.position="none")+ ylim(-1, 1.2)
+all.bands.recovery
+
+###Bottom bands
+arrangedata.bottomr <- ddply(log2bottom, c("recovery","freeze.time"), summarise,
+                            N    = length(log.2.fold),
+                            mean = mean(log.2.fold),
+                            sd   = sd(log.2.fold),
+                            std   = sd / sqrt(N))
+pd <- position_dodge(0.01)  #The errorbars overlapped, so use position_dodge to move them horizontally
+bottom.bands.recovery <- ggplot(arrangedata.bottomr, aes(x=recovery, y=mean, linetype=freeze.time,group=freeze.time)) + 
+  geom_errorbar(aes(ymin=mean-std, ymax=mean+std), width=.1, position=pd) +
+  geom_line(size=1.3) + 
+  geom_point()+
+ylab(bquote(''~Log [2]~'Fold Value of Relative 68+70 kDa Density')) +
+  xlab("Recovery Time")+
+  theme_classic() +
+  scale_color_manual(values = c("#E69F00", "#009E73"))+
+  theme(text = element_text(size=9))+
+  geom_hline(yintercept=c(0), linetype="dashed")+
+  scale_x_discrete(expand=expansion(mult=c(0.2,0.2)), labels=c("2 hours", "20 hours"))+ theme(legend.position="none")+ylim(-1, 1.2)
+bottom.bands.recovery
+
+##Top
+arrangedata.topr <- ddply(log2top, c("recovery","freeze.time"), summarise,
+                         N    = length(log.2.fold),
+                         mean = mean(log.2.fold),
+                         sd   = sd(log.2.fold),
+                         std   = sd / sqrt(N))
+pd <- position_dodge(0.01)  #The errorbars overlapped, so use position_dodge to move them horizontally
+top.bands.recovery <- ggplot(arrangedata.topr, aes(x=recovery, y=mean, linetype=freeze.time,group=freeze.time)) + 
+  geom_errorbar(aes(ymin=mean-std, ymax=mean+std), width=.1, position=pd) +
+  geom_line(size=1.3) + 
+  geom_point()+
+  ylab(bquote(''~Log [2]~'Fold Value of Relative 76 kDa Density')) +
+  xlab("Recovery Time")+
+  theme_classic() +
+  scale_linetype_discrete(labels = c("4 x 2 h", "1 x 8 h"))+
+  theme(text = element_text(size=9))+
+  geom_hline(yintercept=c(0), linetype="dashed")+
+  scale_x_discrete(expand=expansion(mult=c(0.2,0.2)), labels=c("2 hours", "20 hours"))+
+  labs(linetype='Freeze Treatment')+  ylim(-1, 1.2)+theme(legend.position="none")
+top.bands.recovery
+
+legend.recovery <- get_legend(
+  # create some space to the left of the legend
+  top.bands.recovery + theme(legend.box.margin = margin(0, 0, 0, 12))
+)
+
+recovery<- plot_grid(all.bands.recovery, bottom.bands.recovery, top.bands.recovery, legend.recovery, label_size = 12, ncol=4, rel_widths = c(4,4,4,2.5), labels = c("A", "B", "C"))
+recovery
+
+#ggsave("recoveryhsp70.tiff", device = "tiff", dpi = 300, width = 174, height = 90, units = "mm", bg = "white")
+
+```
+
+### Individual Freezes
+Similar methods to those used above
+```{r}
+second <-read.csv(here("Data", "All bands_2.csv"))
+
+controlsecond <- subset(datatop, datatop$treatment=="C")
+controlsecond1 <- aggregate(controllall$dens, by=list(controllall$freeze.time), FUN=mean)
+#write_xlsx(controllall1,"C:\\Users\\laure\\OneDrive\\Year 4\\Mussel Data\\2,4,6,8 hr experiment\\controlall.xlsx")
+#write.xlsx(meandensitytop,"C:\\Users\\laure\\OneDrive\\Year 4\\Mussel Data\\2,4,6,8 hr experiment\\all.xlsx")
+
+log2second <-read.csv(here("Data", "log2all_second.csv"))
+log2.aov.second <- aov(log.2.fold~as.factor(freeze.time),data=log2second)
+summary(log2.aov.second)
+
+secondboxplot <- ggplot(log2second, aes(x=as.factor(freeze.time), y=log.2.fold)) + 
+  geom_boxplot(outlier.shape = NA) + ylim(-1,1) +
+  xlab("Freeze Time (h)") + ylab("Relative HSP70 Density") +
+  theme_classic() + geom_jitter()
+secondboxplot
+
+#ggsave("individualfreeze.tiff", device = "tiff", dpi = 300, width = 174, height = 90, units = "mm", bg = "white")
+```
+
 
 ## Ubiquitin
 
@@ -306,13 +480,17 @@ arrangedata <- ddply(log2, c("recovery","freeze.time"), summarise,
                          std   = sd / sqrt(N))
 pd <- position_dodge(0.01)  
 #The errorbars overlapped, so use position_dodge to move them horizontally
-ubiquitin_recovery <- ggplot(arrangedata, aes(x=recovery, y=mean, colour=freeze.time,group=freeze.time)) + 
+ubiquitin_recovery <- ggplot(arrangedata, aes(x=recovery, y=mean,
+                                              linetype=freeze.time,
+                                              group=freeze.time)) + 
   geom_errorbar(aes(ymin=mean-std, ymax=mean+std), width=.1, position=pd) +
   geom_line(size=1.3) + 
   geom_point()+
-  ylab("Log  Fold Value of Relative Ubiquitin Density") +
+  ylab(bquote(''~Log [2]~'Fold Value of Relative Ubiquitin Density')) +
   xlab("Recovery Time")+
-  theme_classic() +scale_color_manual(values = c("#E69F00", "#009E73"), labels = c("4 x 2 h", "1 x 8 h"))+
+  theme_classic() +
+  theme(text = element_text(size=9))+
+  scale_color_manual(values = c("#E69F00", "#009E73"), labels = c("4 x 2 h", "1 x 8 h"))+
   geom_hline(yintercept=c(0), linetype="dashed")+
   scale_x_discrete(expand=expansion(mult=c(0.2,0.2)), labels=c("2 hours", "20 hours"))+
   labs(color='Freeze Treatment')+  ylim(-0.3, 0.2)+theme(legend.position="none")
@@ -329,16 +507,20 @@ arrangedataposition <- ddply(log2, c("position","freeze.time"), summarise,
                      std   = sd / sqrt(N))
 pd <- position_dodge(0.01)  
 #The errorbars overlapped, so use position_dodge to move them horizontally
-ubiquitin_position <- ggplot(arrangedataposition, aes(x=position, y=mean, colour=freeze.time,group=freeze.time)) + 
+ubiquitin_position <- ggplot(arrangedataposition, aes(x=position, y=mean, 
+                                                      linetype=freeze.time,
+                                                      group=freeze.time)) + 
   geom_errorbar(aes(ymin=mean-std, ymax=mean+std), width=.1, position=pd) +
   geom_line(size=1.3) + 
   geom_point()+
-  ylab("Log Fold Value of Relative Ubiquitin Density") +
+  ylab(bquote(''~Log [2]~'Fold Value of Relative Ubiquitin Density')) +
   xlab("Position")+
-  theme_classic() +scale_color_manual(values = c("#E69F00", "#009E73"), labels = c("4 x 2 h", "1 x 8 h"))+
+  theme_classic() +
+  theme(text = element_text(size=9))+
+  scale_linetype_discrete(labels = c("4 x 2 h", "1 x 8 h"))+
   geom_hline(yintercept=c(0), linetype="dashed")+
   scale_x_discrete(expand=expansion(mult=c(0.2,0.2)), labels=c("High", "Low"))+
-  labs(color='Freeze Treatment')+  ylim(-0.25, 0.15)+theme(legend.position="none")
+  labs(linetype='Freeze Treatment')+  ylim(-0.25, 0.15)+theme(legend.position="none")
 ubiquitin_position
 ```
 
@@ -349,9 +531,12 @@ legend.ubiqutin <- get_legend(
   ubiquitin_position + theme(legend.box.margin = margin(0, 0, 0, 12))
 )
 ubiqutin <- plot_grid(ubiquitin_recovery, ubiquitin_position, 
-                      legend.ubiqutin, ncol=3, rel_widths = c(3, 3, 1.5), 
+                      legend.ubiqutin, ncol=3, rel_widths = c(3, 3, 2), 
                       labels = c("A", "B"))
 ubiqutin
+
+#ggsave("ubiquitinlinegraph", device = "tiff", dpi = 300, width = 174, height = 90, units = "mm", bg = "white")
+
 ```
 
 
