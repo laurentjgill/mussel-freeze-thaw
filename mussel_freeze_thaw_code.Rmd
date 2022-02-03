@@ -215,6 +215,7 @@ shapiro.test(log2all$log.2.fold) #p-value =  0.08344, normal
 bartlett.test(log.2.fold~position ,data=log2all) #p-value = 0.4231
 log2all.aov <- aov(log.2.fold~position*freeze.time*recovery,data=log2all)
 summary(log2all.aov)
+TukeyHSD(log2all.aov)
 ```
 
 ### Bottom bands
@@ -235,7 +236,7 @@ summary(log2bottom.aov)
 log2top <-read.csv(here("Data", "meantop.csv"))
 log2top$recovery <- as.factor(log2top$recovery)
 log2top$freeze.time <- as.factor(log2top$freeze.time)
-logtop.aov <- aov(log.2.fold~position*freeze.time, data=log2top)
+logtop.aov <- aov(log.2.fold~position*freeze.time*recovery, data=log2top)
 summary(logtop.aov)
 TukeyHSD(logtop.aov)
 ```
