@@ -410,8 +410,8 @@ Similar methods to those used above
 ```{r}
 second <-read.csv(here("Data", "All bands_2.csv"))
 
-controlsecond <- subset(datatop, datatop$treatment=="C")
-controlsecond1 <- aggregate(controllall$dens, by=list(controllall$freeze.time), FUN=mean)
+controlsecond <- subset(second, second$treatment=="C")
+controlsecond1 <- aggregate(controlsecond$dens, by=list(controlsecond$freeze.time), FUN=mean)
 #write_xlsx(controllall1,"C:\\Users\\laure\\OneDrive\\Year 4\\Mussel Data\\2,4,6,8 hr experiment\\controlall.xlsx")
 #write.xlsx(meandensitytop,"C:\\Users\\laure\\OneDrive\\Year 4\\Mussel Data\\2,4,6,8 hr experiment\\all.xlsx")
 
