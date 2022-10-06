@@ -59,11 +59,17 @@ only.8.sum <- summarise(only.8.group, prop_surv=mean(Survival, na.rm=TRUE), sd=s
 
 only.8.sum$Time_Frozen_hrs <- as.factor(only.8.sum$Time_Frozen_hrs)
 
-survivalgraph <- ggplot(only.8.sum, aes(x=Time_Frozen_hrs, y=prop_surv)) +geom_point()+ylim(0,1) +
-  xlab("Freeze Treatments") + ylab("Survival Proportion") + 
+x = factor(Time_Frozen_hrs, level = c('8', '4', '2'))
+
+survivalgraph <- ggplot(only.8.sum, aes(x= factor(Time_Frozen_hrs, level = c('8', '4', '2')),y=prop_surv)) +
+  geom_point()+
+  ylim(0,1) +
+  xlab("Freeze Treatments") + 
+  ylab("Survival Proportion") + 
   geom_errorbar(aes(ymin=prop_surv-SE, ymax=prop_surv+SE, width=.2))+
   theme_classic()+
-  geom_point(size=2)+ scale_x_discrete(labels=c("2 hour x4", "4 hour x2", "8 hour x1"))
+  geom_point(size=2)+
+  scale_x_discrete(labels=c("8 hour x1", "4 hour x2", "2 hour x4"))
 
 ```
 
