@@ -628,5 +628,6 @@ Combining plots
 ```{r}
 combinedplot <- plot_grid(sample, fulltreatment, labels = c("A", "B"))
 combinedplot
+
 ```
 
