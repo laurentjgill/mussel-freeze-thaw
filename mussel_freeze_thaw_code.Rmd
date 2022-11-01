@@ -71,6 +71,10 @@ survivalgraph <- ggplot(only.8.sum, aes(x= factor(Time_Frozen_hrs, level = c('8'
   geom_point(size=2)+
   scale_x_discrete(labels=c("8 hour x1", "4 hour x2", "2 hour x4"))
 
+survivalgraph
+
+#ggsave("survivalgraph_revised", device = "tiff", dpi = 300, width = 174, height = 100, units = "mm")
+
 ```
 
 
