@@ -1,5 +1,6 @@
 # Mussel-Freeze-thaw
 ## Repository for the repeated freezing mussel project by Lauren Gill
+Paper Link: https://doi.org/10.1007/s00360-022-01473-2
 
 __Authors:__
 
